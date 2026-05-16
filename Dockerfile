@@ -1,7 +1,7 @@
 # API server only — no UI, no web build stage.
 # The UI lives in its own container (web/Dockerfile) and proxies /api here.
 
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
