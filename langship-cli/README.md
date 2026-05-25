@@ -91,6 +91,7 @@ langship envs reorder <name> <pid> <pid> ...
 langship pipelines list [-o ...]
 langship pipelines get <pipelineId> [-o json|yaml|table]
 langship pipelines push <file.json|.yaml> [--id <pipelineId>] [--name ...]
+langship pipelines validate <file.json|.yaml>
 langship pipelines delete <pipelineId> [-y]
 
 langship creds list [-o ...]
