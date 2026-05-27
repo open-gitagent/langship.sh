@@ -67,6 +67,11 @@ func (e *SastExecutor) Execute(ctx context.Context, node models.NodeDef, inputs 
 		return nil, fmt.Errorf("sast: load agent %q: %w", agentID, err)
 	}
 
+	pat, err := a.GetPAT()
+	if err != nil {
+		return nil, fmt.Errorf("sast: decrypt PAT: %w", err)
+	}
+
 	tool := strings.ToLower(strParam(node.Parameters, "tool", "trivy"))
 	threshold := strings.ToUpper(strParam(node.Parameters, "severityThreshold", "HIGH"))
 	failOnFinding := boolParam(node.Parameters, "failOnFinding", true)
@@ -81,7 +86,7 @@ func (e *SastExecutor) Execute(ctx context.Context, node models.NodeDef, inputs 
 	commitSHA, _ := trigger["commit"].(string)
 	ref := stripRefsHeads(strFirst(strFromAny(trigger["ref"]), a.Ref, "main"))
 
-	cloneDir, cleanup, err := cloneRepo(ctx, a, ref, commitSHA, time.Duration(timeoutSec)*time.Second)
+	cloneDir, cleanup, err := cloneRepo(ctx, a.RepoURL, a.Name, pat, ref, commitSHA, time.Duration(timeoutSec)*time.Second)
 	if err != nil {
 		return nil, err
 	}

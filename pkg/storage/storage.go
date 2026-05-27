@@ -9,6 +9,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/lyzrai/flow/pkg/secrets"
 )
 
 // ErrNotFound is returned when a queried document does not exist. API
@@ -119,13 +121,14 @@ type Credential struct {
 }
 
 // Agent is an agent repo registered with Langship. The PAT and webhook
-// secret are stored server-side; the API layer scrubs them before the
+// secret are stored server-side encrypted; the API layer scrubs them before the
 // record leaves the boundary (see pkg/api/agents.go).
 type Agent struct {
 	ID                 string     `json:"id"                bson:"_id"`
 	Name               string     `json:"name"              bson:"name"`
 	RepoURL            string     `json:"repoUrl"           bson:"repo_url"`
 	Ref                string     `json:"ref,omitempty"     bson:"ref,omitempty"`
+	PATSealed          string     `json:"-"                 bson:"pat_sealed,omitempty"`
 	PAT                string     `json:"-"                 bson:"pat,omitempty"`
 	WebhookID          int64      `json:"webhookId,omitempty"        bson:"webhook_id,omitempty"`
 	WebhookSecret      string     `json:"-"                          bson:"webhook_secret,omitempty"`
@@ -144,6 +147,33 @@ type Agent struct {
 
 	CreatedAt time.Time `json:"createdAt"         bson:"created_at"`
 	UpdatedAt time.Time `json:"updatedAt"         bson:"updated_at"`
+}
+
+// GetPAT returns the decrypted PAT. Falls back to plaintext PAT field for
+// backwards compatibility with agents created before encryption.
+// Returns the decrypted value from PATSealed if available, otherwise plaintext PAT.
+func (a *Agent) GetPAT() (string, error) {
+	if a.PATSealed != "" {
+		return secrets.OpenString(a.PATSealed)
+	}
+	return a.PAT, nil
+}
+
+// SetPAT encrypts and stores the PAT. Clears plaintext PAT field after encryption.
+// This implements read-repair: plaintext PATs are encrypted on next write.
+func (a *Agent) SetPAT(pat string) error {
+	if pat == "" {
+		a.PATSealed = ""
+		a.PAT = ""
+		return nil
+	}
+	sealed, err := secrets.SealString(pat)
+	if err != nil {
+		return err
+	}
+	a.PATSealed = sealed
+	a.PAT = "" // Clear plaintext to enforce encryption
+	return nil
 }
 
 // LookupCredential returns the agent's credential matching name (case-

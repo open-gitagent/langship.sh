@@ -18,3 +18,4 @@ web/.next/
 web/out/*
 !web/out/.gitkeep
 web/dist/
+.claude/settings.local.json

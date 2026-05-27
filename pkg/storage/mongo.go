@@ -428,6 +428,13 @@ func (s *mongoAgents) Create(ctx context.Context, a *Agent) error {
 }
 
 func (s *mongoAgents) Update(ctx context.Context, a *Agent) error {
+	// Zero out plaintext PAT field on every write to prevent stale plaintext
+	// from being re-persisted. This mutates the caller's struct in place as a
+	// side-effect — callers must not rely on a.PAT being non-empty after Update.
+	// Precondition: if a.PAT contains a value to be migrated, call SetPAT() first
+	// (SetPAT encrypts and clears the plaintext). GetPAT() always uses the decrypted
+	// sealed value if available, falling back to plaintext only on first read.
+	a.PAT = ""
 	res, err := s.coll.ReplaceOne(ctx, bson.M{"_id": a.ID}, a)
 	if err != nil {
 		return err

@@ -174,10 +174,13 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		Name:       name,
 		RepoURL:    repo,
 		Ref:        ref,
-		PAT:        strings.TrimSpace(body.PAT),
 		AuthStatus: storage.AuthUntested,
 		CreatedAt:  now,
 		UpdatedAt:  now,
+	}
+	if err := a.SetPAT(strings.TrimSpace(body.PAT)); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 	if err := s.agents.Create(r.Context(), a); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -202,9 +205,17 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 	// dangling hooks pointing at a dead agent ID.
 	if a, err := s.agents.Get(r.Context(), id); err == nil && a.WebhookID != 0 {
 		if repo, perr := github.ParseRepo(a.RepoURL); perr == nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-			_ = github.NewClient(a.PAT).UninstallWebhook(ctx, repo, a.WebhookID)
-			cancel()
+			pat, err := a.GetPAT()
+			if err != nil {
+				slog.WarnContext(r.Context(), "delete_agent_pat_decrypt_failed",
+					slog.String("agent_id", id),
+					slog.Any("error", err))
+			}
+			if pat != "" {
+				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+				_ = github.NewClient(pat).UninstallWebhook(ctx, repo, a.WebhookID)
+				cancel()
+			}
 		}
 	}
 	if err := s.agents.Delete(r.Context(), id); err != nil {
@@ -223,6 +234,14 @@ func (s *Server) handleTestAgentAuth(w http.ResponseWriter, r *http.Request) {
 		writeStorageErr(w, err, "agent not found")
 		return
 	}
+	pat, err := a.GetPAT()
+	if err != nil {
+		slog.ErrorContext(r.Context(), "test_auth_pat_decrypt_failed",
+			slog.String("agent_id", id),
+			slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, errors.New("failed to retrieve agent credentials"))
+		return
+	}
 	repo, err := github.ParseRepo(a.RepoURL)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -230,7 +249,7 @@ func (s *Server) handleTestAgentAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	authErr := github.NewClient(a.PAT).TestAuth(ctx, repo)
+	authErr := github.NewClient(pat).TestAuth(ctx, repo)
 
 	now := time.Now().UTC()
 	a.AuthCheckedAt = &now
@@ -268,7 +287,15 @@ func (s *Server) handleInstallWebhook(w http.ResponseWriter, r *http.Request) {
 		writeStorageErr(w, err, "agent not found")
 		return
 	}
-	if a.PAT == "" {
+	pat, err := a.GetPAT()
+	if err != nil {
+		slog.ErrorContext(r.Context(), "pat_decrypt_failed",
+			slog.String("agent_id", id),
+			slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, errors.New("failed to retrieve agent credentials"))
+		return
+	}
+	if pat == "" {
 		writeError(w, http.StatusBadRequest, errors.New("agent has no PAT — re-create with one"))
 		return
 	}
@@ -288,7 +315,7 @@ func (s *Server) handleInstallWebhook(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	hookID, err := github.NewClient(a.PAT).InstallWebhook(ctx, repo, callback, secret)
+	hookID, err := github.NewClient(pat).InstallWebhook(ctx, repo, callback, secret)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -301,7 +328,7 @@ func (s *Server) handleInstallWebhook(w http.ResponseWriter, r *http.Request) {
 	a.UpdatedAt = now
 	if err := s.agents.Update(r.Context(), a); err != nil {
 		// Try to roll back the hook so we don't leak it.
-		_ = github.NewClient(a.PAT).UninstallWebhook(ctx, repo, hookID)
+		_ = github.NewClient(pat).UninstallWebhook(ctx, repo, hookID)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -319,6 +346,14 @@ func (s *Server) handleUninstallWebhook(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, errors.New("no webhook installed"))
 		return
 	}
+	pat, err := a.GetPAT()
+	if err != nil {
+		slog.ErrorContext(r.Context(), "pat_decrypt_failed",
+			slog.String("agent_id", id),
+			slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, errors.New("failed to retrieve agent credentials"))
+		return
+	}
 	repo, err := github.ParseRepo(a.RepoURL)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -326,7 +361,7 @@ func (s *Server) handleUninstallWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	if err := github.NewClient(a.PAT).UninstallWebhook(ctx, repo, a.WebhookID); err != nil {
+	if err := github.NewClient(pat).UninstallWebhook(ctx, repo, a.WebhookID); err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}

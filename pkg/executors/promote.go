@@ -59,11 +59,15 @@ func (e *PromoteExecutor) Execute(ctx context.Context, node models.NodeDef, inpu
 	if err != nil {
 		return nil, fmt.Errorf("promote: load agent %q: %w", agentID, err)
 	}
+	pat, err := a.GetPAT()
+	if err != nil {
+		return nil, fmt.Errorf("promote: decrypt PAT: %w", err)
+	}
 	repo, err := github.ParseRepo(a.RepoURL)
 	if err != nil {
 		return nil, fmt.Errorf("promote: parse repo %q: %w", a.RepoURL, err)
 	}
-	if a.PAT == "" {
+	if pat == "" {
 		return nil, errors.New("promote: agent has no PAT (need 'repo' scope to open PRs / merge)")
 	}
 
@@ -93,7 +97,7 @@ func (e *PromoteExecutor) Execute(ctx context.Context, node models.NodeDef, inpu
 	logger.Log(fmt.Sprintf("[promote:%s] %s/%s: %s → %s",
 		mode, repo.Owner, repo.Name, from, to))
 
-	cli := github.NewClient(a.PAT)
+	cli := github.NewClient(pat)
 	title := strParam(node.Parameters, "title", "")
 	body := strParam(node.Parameters, "body", "")
 	commitMsg := firstNonEmptyStr(title, fmt.Sprintf("Promote %s → %s", from, to))

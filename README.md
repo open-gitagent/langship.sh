@@ -273,7 +273,7 @@ Adding a node? See the "Adding a node executor" section in
 | `FLOW_ADDR` | `:8090` | API listen address |
 | `FLOW_CORS_ORIGINS` | `*` (compose: `http://localhost:3000`) | CSV allowlist |
 | `FLOW_PUBLIC_URL` | (empty) | Externally-reachable base URL for webhook callback URLs. Set to your `cloudflared` tunnel for GitHub webhooks. |
-| `FLOW_SECRET_KEY` | (unset → credential writes refused) | Master key for AES-GCM sealing of credentials/secrets. Any string; hashed to 32 bytes. **Losing it makes sealed data unrecoverable.** |
+| `FLOW_SECRET_KEY` | (unset → credential writes refused) | **Required for production.** Master key for AES-256-GCM encryption of sensitive data: agent PAT tokens, AWS keys, GCP service accounts, KV secrets. Any string; hashed to 32 bytes via SHA-256. **CRITICAL: Losing this key makes all sealed credentials unrecoverable.** Store securely (e.g., HashiCorp Vault, cloud KMS). For dev/test: any non-empty string. |
 | `MONGO_URI` | (required; compose: `mongodb://localhost:27017`) | |
 | `MONGO_DB` | `flow` | |
 | `RESTATE_INGRESS_URL` | `http://localhost:8081` | |
