@@ -30,7 +30,7 @@ app = typer.Typer(
 
 app.add_typer(agents_cmd.app, name="agents", help="Manage agents (repos + env subscriptions).")
 app.add_typer(envs_cmd.app, name="envs", help="Manage environments (named, ordered pipeline lists).")
-app.add_typer(pipelines_cmd.app, name="pipelines", help="Manage pipeline definitions (push from file, dump).")
+app.add_typer(pipelines_cmd.app, name="pipelines", help="Manage pipeline definitions (push, validate, list, get, delete).")
 app.add_typer(creds_cmd.app, name="creds", help="Manage the global credential pool (aws / gcp / kv).")
 app.add_typer(runs_cmd.app, name="runs", help="Inspect executions and stream logs.")
 
